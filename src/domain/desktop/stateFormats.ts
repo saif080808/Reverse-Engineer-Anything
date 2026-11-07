@@ -223,6 +223,16 @@ const namedXml = (path: string, trimmed: string): boolean =>
   XML_EXTENSIONS.test(path) || trimmed.startsWith("<?xml");
 
 /**
+ * Whether text opens with an element, as a Freeplane map's `<map version=…>`
+ * without a declaration, or with a DOCTYPE that has no internal subset and
+ * then an element, as KmPlot's `<!DOCTYPE kmpdoc><kmpdoc …>`, so it is XML
+ * if it is well formed, whatever the file is called. A DOCTYPE with an
+ * internal subset, which may declare entities, never opens one.
+ */
+const opensElement = (trimmed: string): boolean =>
+  /^(?:<!DOCTYPE[ \t\r\n][^[>]*>[ \t\r\n]*)?<[A-Za-z_:]/u.test(trimmed);
+
+/**
  * Whether decoded text is JSON or XML as `detectStateFormat` reads it, told
  * by syntax alone so no value or document is built: JSON a token at a time
  * and XML by its well-formedness pass, each holding only what is open.
@@ -233,7 +243,10 @@ export const textSyntaxFormat = (
 ): "json" | "xml" | "text" => {
   const trimmed = text.trimStart();
   if (namedJson(path, trimmed) && isJsonText(text)) return "json";
-  if (namedXml(path, trimmed) && isWellFormedXml(text, XML_POLICY))
+  if (
+    (namedXml(path, trimmed) || opensElement(trimmed)) &&
+    isWellFormedXml(text, XML_POLICY)
+  )
     return "xml";
   return "text";
 };
@@ -260,6 +273,9 @@ export const detectStateFormat = (
     return "json";
   if (namedXml(path, trimmed))
     return parseXmlDocument(text, XML_POLICY).ok ? "xml" : "text";
+  // Checked by its well-formedness pass, so text that only opens with `<` builds no document.
+  if (opensElement(trimmed))
+    return isWellFormedXml(text, XML_POLICY) ? "xml" : "text";
   return isKeyfile(text) ? "keyfile" : "text";
 };
 
